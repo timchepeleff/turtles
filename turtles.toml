@@ -1,0 +1,11 @@
+enterFast = 20
+exitFast = 10
+enterSlow = 55
+exitSlow = 20
+
+useAtrStop = true
+useTrailingAtrStop = true
+atrPeriod = 39
+atrStop = 2
+
+hiekenAshi = false
