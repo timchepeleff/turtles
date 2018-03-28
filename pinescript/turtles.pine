@@ -1,0 +1,71 @@
+//@version=2
+//oringinally coded by tmr0, modified by timchep
+//original idea from «Way of the Turtle: The Secret Methods that Turned Ordinary People into Legendary Traders» (2007) CURTIS FAITH
+strategy("Turtles", shorttitle = "Turtles", overlay=true, pyramiding=1, default_qty_type= strategy.percent_of_equity, default_qty_value = 100)
+//////////////////////////////////////////////////////////////////////
+// Component Code Start
+testStartYear = input(2011, "Backtest Start Year")
+testStartMonth = input(12, "Backtest Start Month")
+testStartDay = input(1, "Backtest Start Day")
+testPeriodStart = timestamp(testStartYear,testStartMonth,testStartDay,0,0)
+
+testStopYear = input(2030, "Backtest Stop Year")
+testStopMonth = input(12, "Backtest Stop Month")
+testStopDay = input(30, "Backtest Stop Day")
+testPeriodStop = timestamp(testStopYear,testStopMonth,testStopDay,0,0)
+
+// A switch to control background coloring of the test period
+testPeriodBackground = input(title="Color Background?", type=bool, defval=false)
+testPeriodBackgroundColor = testPeriodBackground and (time >= testPeriodStart) and (time <= testPeriodStop) ? #00FF00 : na
+bgcolor(testPeriodBackgroundColor, transp=97)
+
+testPeriod() =>
+    time >= testPeriodStart and time <= testPeriodStop ? true : false
+// Component Code Stop
+//////////////////////////////////////////////////////////////////////
+
+shortingEnabled = input(title="Enable Shorting?", type=bool, defval=true)
+
+enter_fast = input(20, minval=1)
+exit_fast = input(10, minval=1)
+enter_slow = input(55, minval=1)
+exit_slow = input(20, minval=1)
+
+fastL = highest(enter_fast)
+fastLC = lowest(exit_fast)
+fastS = lowest(enter_fast)
+fastSC = highest(exit_fast)
+
+slowL = highest(enter_slow)
+slowLC = lowest(exit_slow)
+slowS = lowest(enter_slow)
+slowSC = highest(exit_slow)
+
+enterL1 = high > fastL[1]
+exitL1 = low <= fastLC[1]
+enterS1 = low < fastS[1]
+exitS1 = high >= fastSC[1]
+
+enterL2 = high > slowL[1]
+exitL2 = low <= slowLC[1]
+enterS2 = low < slowS[1]
+exitS2 = high >= slowSC[1]
+
+
+if testPeriod()
+    strategy.entry("fast L", strategy.long, when = enterL1)
+
+    if not enterL1
+        strategy.entry("slow L", strategy.long, when = enterL2)
+
+    strategy.close("fast L", when = exitL1)
+    strategy.close("slow L", when = exitL2)
+
+if shortingEnabled and testPeriod()
+    strategy.entry("fast S", strategy.short, when = enterS1)
+
+    if not enterS1
+        strategy.entry("slow S", strategy.short, when = enterS2)
+
+    strategy.close("fast S", when = exitS1)
+    strategy.close("slow S", when = exitS2)
