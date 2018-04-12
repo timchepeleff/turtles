@@ -6,7 +6,18 @@ var strat = {};
 strat.init = function() {
   this.input = 'candle';
   this.currentTrend = 'short';
-  this.requiredHistory = 55;
+
+  // Most strategies need a minimal amount of history before the trading strategy can be started.
+  // For example the strategy may be calculating a moving average for the first 3 candles,
+  // so it must have at least 3 candles to start.
+  // The check function is executed after the required history period is over.
+  // The default required history is 0.
+  //this.requiredHistory = this.settings.enterSlow + 1; //config.tradingAdvisor.historySize;
+  // set to 0  - in the check method we populate array 'candles' with slowEntry+1 candles before giving advice anyway, so no warmup period required.
+  // could probably refactor
+  this.requiredHistory = 0;
+
+
   this.candles = [];
   this.enterFast = this.settings.enterFast;
   this.exitFast = this.settings.exitFast;
@@ -17,118 +28,120 @@ strat.init = function() {
   this.useTrailingAtrStop = this.settings.useTrailingAtrStop;
   this.atrPeriod = this.settings.atrPeriod;
   this.atrStop = this.settings.atrStop;
-  this.maxCandlesLength = 56;
+  this.maxCandlesLength = this.settings.enterSlow + 1;
   this.stop = 0
 
-  this.addIndicator('heiken', 'HEIKEN');
   this.addTalibIndicator('atr', 'atr', { optInTimePeriod: this.atrPeriod });
 }
 
 // What happens on every new candle?
 strat.update = function(candle) {
-  if (this.useTrailingAtrStop) {
-    let atr = this.talibIndicators.atr.result.outReal;
-    if (this.stop < (candle.close - (atr * this.atrStop))) {
-      this.stop = this.stop > (candle.close - (atr * this.atrStop))
-    }
-  }
+  manageTrailingStopLoss(candle, this)
+
+  this.candles.push(candle);
+
+  let start = (this.candles.length < this.maxCandlesLength) ? 0 : (this.candles.length - this.maxCandlesLength)
+  this.candles =  this.candles.slice(start)
 }
 
 // For debugging purposes.
 strat.log = function() {
 }
 
-shouldEnterL = function(candle, strat) {
-  return checkEnterFastL(candle, strat) ? checkEnterFastL(candle, strat) : checkEnterSlowL(candle, strat)
+shouldEnterL = function(candle, currentFrame) {
+  return checkEnterFastL(candle, currentFrame) ? checkEnterFastL(candle, currentFrame) : checkEnterSlowL(candle, currentFrame)
 }
 
-checkEnterFastL = function(candle, strat) {
-  if (candle.high > highest(strat.enterFast, strat)) {
-    strat.currentTrend = 'fastL'
+checkEnterFastL = function(candle, currentFrame) {
+  if (candle.high > highest(currentFrame.enterFast, currentFrame)) {
+    currentFrame.currentTrend = 'fastL'
     return true
   }
 }
 
-checkEnterSlowL = function(candle, strat) {
-  if (candle.high > highest(strat.enterSlow, strat)) {
-    strat.currentTrend = 'slowL'
+checkEnterSlowL = function(candle, currentFrame) {
+  if (candle.high > highest(currentFrame.enterSlow, currentFrame)) {
+    currentFrame.currentTrend = 'slowL'
     return true
   }
 }
 
-shouldExitL = function(candle, strat) {
-  if (strat.currentTrend === "fastL") {
-    return checkExitFastL(candle, strat)
-  } else if(strat.currentTrend === "slowL") {
-    return checkExitSlowL(candle, strat)
+shouldExitL = function(candle, currentFrame) {
+  if (currentFrame.currentTrend === "fastL") {
+    return checkExitFastL(candle, currentFrame)
+  } else if(currentFrame.currentTrend === "slowL") {
+    return checkExitSlowL(candle, currentFrame)
   }
 }
 
-
-checkExitSlowL = function(candle, strat) {
-  if (candle.low <= lowest(strat.exitSlow, strat) || (strat.stop !== 0 && candle.close <= strat.stop)) {
-    strat.currentTrend = 'short'
+checkExitSlowL = function(candle, currentFrame) {
+  if (candle.low <= lowest(currentFrame.exitSlow, currentFrame) || (currentFrame.stop !== 0 && candle.close <= currentFrame.stop)) {
+    currentFrame.currentTrend = 'short'
     return true
   }
 }
 
-checkExitFastL = function(candle, strat) {
-  if (candle.low <= lowest(strat.exitFast, strat) || (strat.stop !== 0 && candle.close <= strat.stop)) {
-    strat.currentTrend = 'short'
+checkExitFastL = function(candle, currentFrame) {
+  if (candle.low <= lowest(currentFrame.exitFast, currentFrame) || (currentFrame.stop !== 0 && candle.close <= currentFrame.stop)) {
+    currentFrame.currentTrend = 'short'
     return true
   }
 }
 
-lowest = function(numberOfCandlesBack, strat) {
-  let relaventCandles = strat.candles.slice((strat.maxCandlesLength-numberOfCandlesBack), -1)
+lowest = function(numberOfCandlesBack, currentFrame) {
+  let relaventCandles = currentFrame.candles.slice((currentFrame.maxCandlesLength-numberOfCandlesBack), -1)
   return Math.min.apply(Math, relaventCandles.map(function(c) { return c.low; }))
 }
 
-highest = function(numberOfCandlesBack, strat) {
-  let relaventCandles = strat.candles.slice((strat.maxCandlesLength-numberOfCandlesBack), -1)
+highest = function(numberOfCandlesBack, currentFrame) {
+  let relaventCandles = currentFrame.candles.slice((currentFrame.maxCandlesLength-numberOfCandlesBack), -1)
   return Math.max.apply(Math, relaventCandles.map(function(c) { return c.high; }))
 }
 
-strat.check = function(candle) {
-  let atr = this.talibIndicators.atr.result.outReal;
-
-  if (this.hiekenAshi) {
-    let heiken = this.indicators.heiken;
-    var newCandle = {
-        close: heiken.close,
-        open: heiken.open,
-        high: heiken.high,
-        low: heiken.low
-      }
-
-    this.candles.push(newCandle);
-
-    let start = (this.candles.length < this.maxCandlesLength) ? 0 : (this.candles.length - this.maxCandlesLength)
-    this.candles =  this.candles.slice(start)
-  } else {
-    var newCandle = candle
-
-    this.candles.push(newCandle);
-
-    let start = (this.candles.length < this.maxCandlesLength) ? 0 : (this.candles.length - this.maxCandlesLength)
-    this.candles =  this.candles.slice(start)
+manageStopLoss = function(candle, currentFrame) {
+  if (currentFrame.useAtrStop) {
+    let atr = currentFrame.talibIndicators.atr.result.outReal;
+    currentFrame.stop = (candle.close - (atr * currentFrame.atrStop))
   }
+}
 
-  if (this.candles.length === this.maxCandlesLength) {
-    if(this.currentTrend === 'fastL' || this.currentTrend === 'slowL') {
-      if (shouldExitL(newCandle, this)) {
-        this.currentTrend = 'short';
-        this.stop = 0;
-        this.advice('short');
-      }
-    } else {
-      if (shouldEnterL(newCandle, this)) {
-        // if (this.useAtrStop) { this.stop = (newCandle.close - (atr * this.atrStop)) }
-        if (this.useAtrStop) { this.stop = (newCandle.close - (atr * this.atrStop)) }
+manageTrailingStopLoss = function(candle, currentFrame) {
+  if (currentFrame.useTrailingAtrStop) {
+    let atr = currentFrame.talibIndicators.atr.result.outReal;
 
-        this.advice('long');
-      }
+    // Update the stop loss if the newly suggest stop loss is higher than previous value
+    if (currentFrame.stop < (candle.close - (atr * currentFrame.atrStop))) {
+      currentFrame.stop = candle.close - (atr * currentFrame.atrStop)
     }
+  }
+}
+
+computeExitSignal = function(candle, currentFrame) {
+  if(currentFrame.currentTrend === 'fastL' || currentFrame.currentTrend === 'slowL') {
+    if (shouldExitL(candle, currentFrame)) {
+      currentFrame.currentTrend = 'short';
+      currentFrame.stop = 0;
+      currentFrame.advice('short');
+    }
+  }
+}
+
+computeEntrySignal = function(candle, currentFrame) {
+  if(currentFrame.currentTrend === 'short') {
+    if (shouldEnterL(candle, currentFrame)) {
+      manageStopLoss(candle, currentFrame)
+
+      currentFrame.advice('long');
+    }
+  }
+}
+
+
+strat.check = function(candle) {
+  // won't do anything until we have slowEntry+1 number of candles
+  if (this.candles.length === this.maxCandlesLength) {
+    computeExitSignal(candle, this)
+    computeEntrySignal(candle, this)
   }
 }
 
