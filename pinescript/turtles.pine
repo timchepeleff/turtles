@@ -1,7 +1,9 @@
-//@version=2
+//@version=3
 //oringinally coded by tmr0, modified by timchep
 //original idea from «Way of the Turtle: The Secret Methods that Turned Ordinary People into Legendary Traders» (2007) CURTIS FAITH
 strategy("Turtles", shorttitle = "Turtles", overlay=true, pyramiding=1, default_qty_type= strategy.percent_of_equity, default_qty_value = 100)
+
+
 //////////////////////////////////////////////////////////////////////
 // Component Code Start
 testStartYear = input(2011, "Backtest Start Year")
@@ -24,48 +26,21 @@ testPeriod() =>
 // Component Code Stop
 //////////////////////////////////////////////////////////////////////
 
-shortingEnabled = input(title="Enable Shorting?", type=bool, defval=true)
 
-enter_fast = input(20, minval=1)
-exit_fast = input(10, minval=1)
-enter_slow = input(55, minval=1)
-exit_slow = input(20, minval=1)
+enterLong = input(26, minval=1)
+exitLong = input(10, minval=1)
+enterShort = input(26, minval=1)
+exitShort = input(10, minval=1)
 
-fastL = highest(enter_fast)
-fastLC = lowest(exit_fast)
-fastS = lowest(enter_fast)
-fastSC = highest(exit_fast)
+enterL = close > highest(enterLong)[1]
+enterS = close < lowest(enterShort)[1]
 
-slowL = highest(enter_slow)
-slowLC = lowest(exit_slow)
-slowS = lowest(enter_slow)
-slowSC = highest(exit_slow)
-
-enterL1 = high > fastL[1]
-exitL1 = low <= fastLC[1]
-enterS1 = low < fastS[1]
-exitS1 = high >= fastSC[1]
-
-enterL2 = high > slowL[1]
-exitL2 = low <= slowLC[1]
-enterS2 = low < slowS[1]
-exitS2 = high >= slowSC[1]
-
+exitL = close <= lowest(exitLong)[1] and not enterS
+exitS = close >= highest(exitShort)[1] and not enterL
 
 if testPeriod()
-    strategy.entry("fast L", strategy.long, when = enterL1)
+    strategy.close("long", when = exitL)
+    strategy.entry("long", strategy.long, when = enterL)
 
-    if not enterL1
-        strategy.entry("slow L", strategy.long, when = enterL2)
-
-    strategy.close("fast L", when = exitL1)
-    strategy.close("slow L", when = exitL2)
-
-if shortingEnabled and testPeriod()
-    strategy.entry("fast S", strategy.short, when = enterS1)
-
-    if not enterS1
-        strategy.entry("slow S", strategy.short, when = enterS2)
-
-    strategy.close("fast S", when = exitS1)
-    strategy.close("slow S", when = exitS2)
+    strategy.close("short", when = exitS)
+    strategy.entry("short", strategy.short, when = enterS)
